@@ -1,0 +1,230 @@
+---
+title: "Exploring the Impact of Advertising on Sales: A Multiple Linear Regression Analysis"
+runningheader: "Advertising and Sales Regression" 
+author: "Ismah Ahmed"
+date: "December 12, 2024"
+output: 
+  tufte::tufte_handout:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(corrplot)
+
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+
+# **Introduction**
+
+## **Examining the Association of Advertising Spending on Sales**
+
+Does spending on different advertisement types have an effect on sales? Companies invest in different types of advertising, such as TV, radio, and newspapers advertisement in order to increase sales. This project examines whether spending on these advertisements are associated with a change in sales and identifies which type of spending is most effective. In this project, we will explore advertising data and use it to calculate a least squares regression equation that predicts Sales (in thousands) based on advertising spending on TV, newspapers, and radio. We will formally test whether the set of these predictors is associated with total sales at the $\alpha$ = 0.05 significance level. Furthermore, we will analyze the significance of the model by summarizing the contribution of each type of advertising separately, again at the $\alpha$ = 0.05 significance level.
+
+## **Data Origin and Overview**
+
+The dataset used in this project, titled *Advertising Spend vs. Sales*, originates from Kaggle. Click [*here*](https://www.kaggle.com/datasets/brsahan/advertising-spend-vs-sales/data?select=Advertising.csv) to be directed to the kaggle dataset. The dataset contains the following 4 numerical variables (all in thousands of dollars):
+
+- **TV**: Total Spent on TV advertisements 
+- **Radio**: Total Spent on radio advertisements 
+- **Newspaper**: Total Spent on newspaper advertisements 
+- **Sales**: Total sales 
+
+Below, you will find the first few rows of the dataset:
+
+```{r fig-fullwidth, fig.width = 10, fig.height = 2, fig.fullwidth = TRUE, fig.cap = "A full width figure.", warning=FALSE, message=FALSE, cache=TRUE, echo = FALSE}
+data <- read.csv(file = "Advertising.csv", header = TRUE)
+
+kbl(head(data, 5), booktabs = TRUE, caption = "Top 5 rows from Advertising data") %>%
+  kable_styling(full_width = TRUE) %>%
+  column_spec(1, width = "1cm") 
+```
+
+
+## Data Cleaning and Examining
+
+Firstly, we want to check if there are any missing values in our dataset. After running the following code, it appears there are no missing data.
+
+```{r, comment=NA}
+colSums(is.na(data))
+```
+
+Below, we are confirming the structure of the data set, making sure that the variables are all numeric. 
+
+```{r, comment = NA}
+str(data)
+```
+
+
+<p>&nbsp;</p> 
+
+Before starting the multiple linear regression (MLR) model, some preliminary steps are required. Below are the summary statistics for the variables available in the dataset. TV has the highest mean spending among the advertisement categories, while Radio shows the smallest mean. The variation in TV spending is much wider compared to Radio and Newspaper, which have narrower ranges of values. 
+
+```{r, echo=FALSE}
+summary_table <- data.frame(
+  Variable = c("TV", "Radio", "Newspaper", "Sales"),
+  Mean = c(mean(data$TV), mean(data$radio), mean(data$newspaper), mean(data$sales)),
+  SD = c(sd(data$TV), sd(data$radio), sd(data$newspaper), sd(data$sales)),
+  Min = c(min(data$TV), min(data$radio), min(data$newspaper), min(data$sales)),
+  Q1 = c(quantile(data$TV, 0.25), quantile(data$radio, 0.25), quantile(data$newspaper, 0.25), quantile(data$sales, 0.25)),
+  Q3 = c(quantile(data$TV, 0.75), quantile(data$radio, 0.75), quantile(data$newspaper, 0.75), quantile(data$sales, 0.75)),
+  Max = c(max(data$TV), max(data$radio), max(data$newspaper), max(data$sales))
+)
+kbl(summary_table, caption = "Summary Statistics for Advertising Dataset", booktabs = TRUE) %>%
+  kable_styling(full_width = TRUE, position = "center")%>%
+  column_spec(1, width = "1.5cm") 
+```
+<p>&nbsp;</p> 
+
+Next, let's examine the distribution of spending across our variables, including the response variable Sales. The distribution of TV and Radio spending appears to be relatively uniform, while newspaper shows a right skew, indicating that higher spending on newspaper ads is less common but can be high. This might impact our model as outliers or extreme values can disproportionately affect the results. 
+
+```{r fig-nocap-fullwidth, fig.fullwidth=TRUE, fig.width=8, fig.height=4, fig.cap="Distribution of TV, Radio, and Newspaper Spending and Total Sales in Thousands"}
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))  
+
+hist(data$TV, main = "Distribution of TV Ad Costs", xlab = "Spending", col = "lightblue1")
+hist(data$radio, main = "Distribution of Radio Ad Costs", xlab = "Spending", col = "lightblue1")
+hist(data$newspaper, main = "Distribution of Newspaper Ad Costs", xlab = "Spending", col = "lightblue1")
+hist(data$sales, main = "Distribution of Sales", xlab = "Sales", col = "lightblue1")
+```
+
+<p>&nbsp;</p> 
+
+
+The correlation matrix (labeled Figure 2) provides a measure of the linear relationship between pairs of variables. 
+
+- TV and Radio: Correlation is  0.055, very weak positive relationship. suggest no significant linear relationship
+- TV and Newspaper: 0.057, very weak positive relationship, suggest no significant linear relationship 
+- Radio and Newspaper is 0.354, moderate positive relationship 
+
+```{r fig-margin, fig.margin = TRUE, fig.width=2, fig.height=2, cache=TRUE, message=FALSE, fig.cap="Correlation Matrix of TV, Radio, and Newspaper Spending", echo = FALSE}
+cor_matrix <- cor(data[, c("TV", "radio", "newspaper")])
+corrplot(cor_matrix, method = "number", col = "black",  tl.col = "black", tl.srt = 45,
+         number.cex = 1, cl.pos = "n", tl.cex = 0.4, number.digits = 3)
+```
+
+These weak correlations suggest that multicollinearity is not a major concern in our analysis. Since the predictor variables (TV, Radio, and Newspaper) show very weak correlations with each other, we can proceed with the multiple linear regression model without the need for further adjustments.
+
+Next, lets take a look at boxplots for each of the predictor variables
+
+```{r, fig.width=4, fig.height=3, fig.cap= "Boxplot of each predictor variable"}
+par(mfrow = c(1, 3))
+
+boxplot(data$TV, main = "TV Advertising Costs", cex.main = 0.8)
+boxplot(data$radio, main = "Radio Advertising Costs", cex.main = 0.8)
+boxplot(data$newspaper, main = "Newspaper Advertising Costs", cex.main = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+At first glance, there appears to be 2 outliers in Newspaper Advertising however, after further investigation, I don't have any reason to believe these 2 data points were a mistake, therefore, I will be leaving them in.
+
+<p>&nbsp;</p> 
+
+# **Statistical Methods**
+
+This project utilizes several statistical methods to analyze the relationship between advertising variables and sales:
+
+- Multiple Linear Regression (MLR): We will use multiple linear regression to calculate a least squares regression equation that predicts **Sales** based on advertising spending on TV, newspapers, and radio.
+
+- F-Test: The F-test for multiple linear regression will serve as our decision rule to determine whether the predictors collectively explain variance in sales.
+
+- Residual Analysis: A residual plot will be generated, showing the fitted values from the regression against the residuals. This will help assess the model's fit and detect any potential outliers.
+
+- \( R^2 \): Represents the proportion (percentage) of the variation in the response variable, Sales, that is explained by the multiple regression model.
+
+
+
+# **Performing our MLR**
+
+## **Step 1: Set up the hypotheses and select the alpha level**
+
+- \(H_0\):  \( \beta_{\text{TV}} = \beta_{\text{radio}} = \beta_{\text{newspaper}} = 0 \)  *(These variables are not significant predictors of Sales)*
+- \(H_1\):  At least one of \( \beta_{\text{TV}}, \beta_{\text{radio}}, \beta_{\text{newspaper}} \neq 0 \). *(At least one of these variables is a significant predictor of Sales)*
+- \( \alpha = 0.05 \)
+
+## **Step 2: Select the appropriate test statistic**
+
+$\displaystyle F = \frac{\text{MS Red}}{\text{MS Res}}$, df = 3, n-k-1
+
+## **Step 3: State the decision rule**
+
+- Using R, get the appropriate value from the F-distribution with 3, n - k - 1 = 200 - 3 - 1 = 196 degrees of freedom and associated with a right hand tail probability of \( \alpha = 0.05 \) 
+
+```{r, comment = NA}
+qf(0.95, df1 = 3, df2 = 196)
+```
+
+- Decision Rule: Reject \(H_0\) if \(F \ge 2.650677\)
+- Otherwise, do not reject \(H_0\)
+
+## **Step 4: Compute the test statistic**
+
+```{r, comment = NA}
+mlr <- lm(data$sales ~ data$TV + data$radio + data$newspaper)
+summary(mlr)$fstatistic[1]
+```
+
+## **Step 5: Conslusion**
+
+Reject \(H_0\) since 570.2702 is greater than 2.650677. We have significant evidence at \( \alpha = 0.05 \) level that TV, radio and newspaper advertising spending when taken together are significant predictors of Sales. That is, there is evidence of a linear association between sales and TV, radio and newspaper advertising spending. The model reports a very small p value indicating that the overall model is highly statistically significant. This means that at least one of the predictors is significantly associated with Sales.
+
+
+## **Lets take a closer look at the model output:**
+
+```{r, comment = NA}
+summary(mlr)
+```
+
+- Intercept: The estimated Sales when all predictors (TV, radio, newspaper) are 0 is 2.94
+- F-statistic: `r summary(mlr)$fstatistic[1]`, lead us to reject null hypothesis
+- Degrees of Freedom: `r summary(mlr)$fstatistic[2]` and `r summary(mlr)$fstatistic[3]`
+- P-value: <2.2e-16, very small indicating overall model is statistically significant
+- \( R^2 \) value is 0.8972. The model explains about 89.72% of the variability in Sales
+- Newspaper spending does not appear to contribute significantly, in fact, it has a high p value
+
+
+Lets take a look at the contribution of each variable seperatly
+
+
+```{r, comment = NA}
+coef(summary(mlr))
+```
+
+- TV: The p value for TV is very small making it a significant predictor for Sales. The estimate is 0.0457 meaning that for every additional unit increase spent on TV advertising, sales is expected to go up that amount (in thousands of dollars). This is holding the other predictors constant
+- Radio: The p value for Radio is very small also making it a significant predictor for Sales. For every additional unit increase spend on Radio advertising, sales are expected to go by by 0.1885 units (thousands of dollars)
+- Newspaper: The p-value for newspaper is 0.8599 which suggests that spending money on newspaper ads does not have a significant association on Sales when TV and Radio predictors are included. 
+
+
+Below, we will generate a residual plot showing the fitted values from the regression against the residuals to determine if the fit of the model is reasonable. 
+
+```{r, comment = NA, fig.cap="Plotting Residuals", fig.width=8, fig.height=4}
+residuals_mlr <- resid(mlr)
+fitted_mlr <- fitted(mlr)
+
+plot(fitted_mlr, residuals_mlr,
+     main = "Fitted Values VS Residuals",
+     xlab = "Fitted Values", 
+     ylab  = "Risiduals",
+     pch = 20)
+abline(0,0, col = "red")
+```
+
+In regression, variability of the response variable should be constant across the regression line and this assumption is checked using a residual plot. It is difficult to be certain just based on initial observation but it appears that there is a slight curve that is shown on the residual plot.
+
+# Conclusion
+
+The results of our analysis show that TV and radio advertising are strong predictors of sales, while newspaper advertising does not seem to have a statistically significant impact. In other words, money spent on TV and radio ads is closely associated with total sales, but spending on newspaper ads does not show any significant change. However, after further analysis on residuals, I am more suspicious that the assumptions of the test does not hold.
+
+## Limitations
+
+- One assumption of our multiple linear regression analysis is linearity. When we plotted the residuals (differences between predicted and actual sales), there is a slight curved pattern suggesting this assumption may not hold true. 
+
+- There is a clear outlier that is shown in the residual plot that may influence the overall model
+
+- Our model only includes TV, radio, and newspaper advertising as predictors, however, there may be other factors (other types of advertising or differing conditions) that are not included but could be associated with sales. 
+
+
